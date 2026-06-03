@@ -16,21 +16,12 @@ class SymbolDefinition:
     scan_interval: str | timedelta | None = None
     no_unit: bool = False
 
-    def __init__(self, symbol: str, **kwargs: any) -> None:
-        """Create a new symbol definition.
-
-        ### Parameters
-            symbol(str): The symbol
-            **scan_interval (time_delta): The symbol scan interval
-        """
+    def __init__(self, symbol: str, **kwargs) -> None:
+        """Create a new symbol definition."""
         self.symbol = symbol
-
-        if CONF_TARGET_CURRENCY in kwargs:
-            self.target_currency = kwargs[CONF_TARGET_CURRENCY]
-        if CONF_SCAN_INTERVAL in kwargs:
-            self.scan_interval = kwargs[CONF_SCAN_INTERVAL]
-        if CONF_NO_UNIT in kwargs:
-            self.no_unit = kwargs[CONF_NO_UNIT]
+        self.target_currency = kwargs.get(CONF_TARGET_CURRENCY)
+        self.scan_interval = kwargs.get(CONF_SCAN_INTERVAL)
+        self.no_unit = kwargs.get(CONF_NO_UNIT, False)
 
     def __repr__(self) -> str:
         """Return the representation."""
@@ -38,7 +29,7 @@ class SymbolDefinition:
             f"{self.symbol},{self.target_currency},{self.scan_interval},{self.no_unit}"
         )
 
-    def __eq__(self, other: any) -> bool:
+    def __eq__(self, other) -> bool:
         """Return the comparison."""
         return (
             isinstance(other, SymbolDefinition)
@@ -60,10 +51,6 @@ class ConsentData:
     """Class for data related to GDPR consent."""
 
     consent_content: str = ""
-    """Consent verification content"""
     consent_post_url: str = ""
-    """Url from consent check where data is to be submitted"""
     successful_consent_url: str = ""
-    """Url to navigate to after successful consent"""
     need_consent: bool = False
-    """Consent is needed"""

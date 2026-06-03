@@ -1,7 +1,4 @@
-"""The Yahoo finance component.
-
-https://github.com/iprak/yahoofinance
-"""
+"""The Yahoo finance component coordinator."""
 
 from __future__ import annotations
 
@@ -49,23 +46,15 @@ class CrumbCoordinator:
     """Class to gather crumb/cookie details."""
 
     _instance = None
-    """Static instance of CrumbCoordinator."""
 
     preferred_user_agent = ""
-    """The preferred (last successeful) user agent."""
 
     def __init__(self, hass: HomeAssistant, websession: aiohttp.ClientSession) -> None:
         """Initialize."""
-
         self.cookies: SimpleCookie[str] = None
-        """Cookies for requests."""
         self.crumb: str | None = None
-        """Crumb for requests."""
         self._hass = hass
-
         self.retry_duration = CRUMB_RETRY_DELAY
-        """Crumb retry request delay."""
-
         self._crumb_retry_count = 0
         self._websession = websession
 
@@ -84,21 +73,17 @@ class CrumbCoordinator:
 
     async def try_get_crumb_cookies(self) -> str | None:
         """Try to get crumb and cookies for data requests."""
-
         consent_data = await self.initial_navigation(INITIAL_URL)
-        if consent_data is None:  # Consent check failed
+        if consent_data is None:
             return None
 
         if consent_data.need_consent:
             if not await self.process_consent(consent_data):
                 return None
-
             data = await self.initial_navigation(consent_data.successful_consent_url)
-
-            if data is None:  # Something went bad, we did get consent
+            if data is None:
                 LOGGER.error("Post consent navigation failed")
                 return None
-
             if data.need_consent:
                 LOGGER.error("Yahoo reported needing consent even after we got it once")
                 return None
@@ -112,15 +97,8 @@ class CrumbCoordinator:
         return self.crumb
 
     async def initial_navigation(self, url: str) -> ConsentData | None:
-        """Navigate to base page. This determines if consent is needed.
-
-        Returns:
-            None if consent check failed or the consent response
-
-        """
-
+        """Navigate to base page to determine if consent is needed."""
         LOGGER.debug("Navigating to base page %s", url)
-
         try:
             async with self._websession.get(
                 url,
@@ -128,7 +106,6 @@ class CrumbCoordinator:
                 timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
             ) as response:
                 LOGGER.debug("Response %d, URL: %s", response.status, response.url)
-
                 if response.status != HTTPStatus.OK:
                     LOGGER.error(
                         "Failed to navigate to %s, status=%d, reason=%s",
@@ -137,39 +114,28 @@ class CrumbCoordinator:
                         response.reason,
                     )
                     return None
-
-                # This request will return cookies only if consent is not needed
                 if response.cookies:
                     self.cookies = response.cookies
-
-                # https://guce.yahoo.com/consent?brandType=nonEu&gcrumb=eZ_Jbm0&done=https%3A%2F%2Ffinance.yahoo.com%2F
                 if response.url.host.lower() == CONSENT_HOST:
                     LOGGER.info("Consent page %s detected", response.url)
-
                     return ConsentData(
                         need_consent=True,
                         consent_content=await response.text(),
                         consent_post_url=response.url,
                     )
-
                 LOGGER.debug("No consent needed, have cookies=%s", bool(self.cookies))
-
         except TimeoutError as ex:
             LOGGER.error("Timed out accessing initial url. %s", ex)
         except aiohttp.ClientError as ex:
             LOGGER.error("Error accessing initial url. %s", ex)
         except Exception as ex:  # noqa: BLE001
             LOGGER.error("Unexpected error accessing initial url. %s", ex)
-
         return ConsentData()
 
     async def process_consent(self, consent_data: ConsentData) -> bool:
         """Process GDPR consent."""
-
-        # websession = async_get_clientsession(self._hass)
         form_data = self.build_consent_form_data(consent_data.consent_content)
         LOGGER.debug("Posting consent %s", str(form_data))
-
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
                 response = await self._websession.post(
@@ -177,12 +143,6 @@ class CrumbCoordinator:
                     data=form_data,
                     headers=INITIAL_REQUEST_HEADERS,
                 )
-
-                # Sample responses
-                # 302 https://guce.yahoo.com/copyConsent?sessionId=3_cc-session_0d6c4281-76f7-44ce-8783-6db9d4f39c40&lang=nb-NO
-                # 302 https://finance.yahoo.com/?guccounter=1
-                # 200
-
                 if response.status != HTTPStatus.OK:
                     LOGGER.error(
                         "Failed to post consent %d, reason=%s",
@@ -190,22 +150,17 @@ class CrumbCoordinator:
                         response.reason,
                     )
                     return False
-
                 if response.cookies:
                     self.cookies = response.cookies
-
                 consent_data.successful_consent_url = response.url
-
                 LOGGER.debug(
                     "After consent processing, have cookies=%s", bool(self.cookies)
                 )
                 return True
-
         except TimeoutError as ex:
             LOGGER.error("Timed out processing consent. %s", ex)
         except aiohttp.ClientError as ex:
             LOGGER.error("Error accessing consent url. %s", ex)
-
         return False
 
     def cookies_missing(self) -> bool:
@@ -214,31 +169,24 @@ class CrumbCoordinator:
 
     async def try_crumb_page(self) -> str | None:
         """Try to get crumb from the end point."""
-
         LOGGER.info("Accessing crumb page")
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         last_status = 0
 
         for user_agent in USER_AGENTS_FOR_XHR:
             headers = {**XHR_REQUEST_HEADERS, "user-agent": user_agent}
-
             async with self._websession.get(
                 GET_CRUMB_URL, headers=headers, timeout=timeout, cookies=self.cookies
             ) as response:
                 last_status = response.status
-
                 if last_status == HTTPStatus.OK:
                     self.preferred_user_agent = user_agent
-
                     self.crumb = await response.text()
                     if not self.crumb:
                         LOGGER.error("No crumb reported")
-
                     LOGGER.info("Crumb page reported %s", self.crumb)
                     self._crumb_retry_count = 0
                     return self.crumb
-
-                # Try next user-agent for 429, stop trying for any other failures
                 if last_status == 429:
                     LOGGER.info(
                         "Crumb request responded with status 429 for '%s', re-trying with different agent",
@@ -250,74 +198,24 @@ class CrumbCoordinator:
                         last_status,
                         response.reason,
                     )
-
                     break
 
-        self._crumb_retry_count = self._crumb_retry_count + 1
-
+        self._crumb_retry_count += 1
         if self._crumb_retry_count > TOO_MANY_CRUMB_RETRY_FAILURES_COUNT:
             self.retry_duration = TOO_MANY_CRUMB_RETRY_FAILURES_DELAY
-            LOGGER.info(
-                "Too many crumb failures, will retry after %d seconds",
-                self.retry_duration,
-            )
-
             self._crumb_retry_count = 0
         else:
-            if last_status == 429:
-                # Ideally we would want to use the seconds passed back in the header
-                # for 429 but there seems to be no such value.
-                self.retry_duration = CRUMB_RETRY_DELAY_429
-            else:
-                self.retry_duration = CRUMB_RETRY_DELAY
-
-            LOGGER.info(
-                "Crumb failure, will retry after %d seconds",
-                self.retry_duration,
+            self.retry_duration = (
+                CRUMB_RETRY_DELAY_429 if last_status == 429 else CRUMB_RETRY_DELAY
             )
-
+        LOGGER.info("Crumb failure, will retry after %d seconds", self.retry_duration)
         return None
-
-    # async def parse_crumb_from_content(self, content: str) -> str:
-    #     """Parse and update crumb from response content."""
-
-    #     LOGGER.debug("Parsing crumb from content (length: %d)", len(content))
-
-    #     start_pos = content.find('"crumb":"')
-    #     LOGGER.debug("Start position: %d", start_pos)
-    #     end_pos = -1
-
-    #     if start_pos != -1:
-    #         start_pos = start_pos + 9
-    #         end_pos = content.find('"', start_pos + 10)
-    #         LOGGER.debug("End position: %d", end_pos)
-    #         if end_pos != -1:
-    #             self.crumb = (
-    #                 content[start_pos:end_pos]
-    #                 .encode()
-    #                 .decode("unicode_escape")
-    #             )
-
-    #     # Crumb was not located
-    #     if not self.crumb:
-    #         LOGGER.info(
-    #             "Crumb not found, start position: %d, ending position: %d. Refer to YahooFinanceCrumbContent.log in the config folder.",
-    #             start_pos,
-    #             end_pos,
-    #         )
-
-    #         if LOGGER.isEnabledFor(logging.INFO):
-    #             await self._hass.async_add_executor_job(
-    #                 write_utf8_file,
-    #                 self._hass.config.path("YahooFinanceCrumbContent.log"),
-    #                 content,
-    #             )
 
     def build_consent_form_data(self, content: str) -> dict[str, str]:
         """Build consent form data from response content."""
         pattern = r'<input.*?type="hidden".*?name="(.*?)".*?value="(.*?)".*?>'
         matches = re.findall(pattern, content)
-        basic_data = {"reject": "reject"}  # From "Reject" submit button
+        basic_data = {"reject": "reject"}
         additional_data = dict(matches)
         return {**basic_data, **additional_data}
 
@@ -326,50 +224,36 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Yahoo finance data update coordinator."""
 
     @staticmethod
-    def parse_symbol_data(symbol_data: dict) -> dict[str, any]:
+    def parse_symbol_data(symbol_data: dict) -> dict[str, Any]:
         """Return data pieces which we care about, use 0 for missing numeric values."""
         data = {}
-
-        # get() ensures that we have an entry in symbol_data.
         for data_group in NUMERIC_DATA_GROUPS.values():
             for value in data_group:
                 key = value[0]
-
-                # Default value for most missing numeric keys is 0
                 default_value = NUMERIC_DATA_DEFAULTS.get(key, 0)
-
                 data[key] = symbol_data.get(key, default_value)
-
         for key in STRING_DATA_KEYS:
             data[key] = symbol_data.get(key)
-
         return data
 
     @staticmethod
-    def fix_conversion_symbol(symbol: str, symbol_data: any) -> str:
+    def fix_conversion_symbol(symbol: str, symbol_data: Any) -> str:
         """Fix the conversion symbol from data."""
-
         if symbol is None or symbol == "" or not symbol.endswith("=X"):
             return symbol
-
-        # Data analysis showed that data for conversion symbol has 'shortName': 'USD/EUR'
-        short_name = symbol_data["shortName"] or ""
+        short_name = symbol_data.get("shortName") or ""
         from_to = short_name.split("/")
         if len(from_to) != 2:
             return symbol
-
         from_currency = from_to[0]
         to_currency = from_to[1]
         if from_currency == "" or to_currency == "":
             return symbol
-
         conversion_symbol = f"{from_currency}{to_currency}=X"
-
         if conversion_symbol != symbol:
             LOGGER.info(
                 "Conversion symbol updated to %s from %s", conversion_symbol, symbol
             )
-
         return conversion_symbol
 
     def __init__(
@@ -378,13 +262,13 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         update_interval: timedelta,
         cc: CrumbCoordinator,
-        webSession: aiohttp.ClientSession,
+        websession: aiohttp.ClientSession,
     ) -> None:
         """Initialize."""
         self._symbols = symbols
         self.data = None
         self.loop = hass.loop
-        self.websession = webSession
+        self.websession = websession
         self._cc = cc
         self.failed_count = 0
 
@@ -410,29 +294,21 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Add symbol to the symbol list."""
         if symbol not in self._symbols:
             self._symbols.append(symbol)
-
-            # Request a refresh to get data for the missing symbol.
-            # This would have been called while data for sensor was being parsed.
-            # async_request_refresh has debouncing built into it, so multiple calls
-            # to add_symbol will still resut in single refresh.
             event.async_call_later(
                 self.hass,
                 DELAY_ASYNC_REQUEST_REFRESH,
                 self._async_request_refresh_later,
             )
-
             LOGGER.info(
                 "Added %s and requested update in %d seconds",
                 symbol,
                 DELAY_ASYNC_REQUEST_REFRESH,
             )
             return True
-
         return False
 
     async def get_json(self) -> dict:
         """Get the JSON data."""
-
         url = await self.build_request_url()
 
         preferred_user_agent = self._cc.preferred_user_agent
@@ -441,12 +317,9 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Requesting data request with the preferred agent '%s'",
                 preferred_user_agent,
             )
-
             [result_json, status] = await self._fetch_json(url, preferred_user_agent)
-
             if status == HTTPStatus.OK:
                 return result_json
-
             if status == 429:
                 LOGGER.info(
                     "Data request responded with status 429 for '%s', re-trying other agents",
@@ -454,29 +327,22 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
 
         for user_agent in USER_AGENTS_FOR_XHR:
-            # Skip if we have already tried the agent
             if preferred_user_agent == user_agent:
                 continue
-
             [result_json, status] = await self._fetch_json(url, user_agent)
-
             if status == HTTPStatus.OK:
                 LOGGER.info("Successful data received for '%s'", user_agent)
                 return result_json
-
             if status != 429:
                 break
-
             LOGGER.info(
                 "Data request responded with status 429 for '%s', re-trying with different agent",
                 user_agent,
             )
-
         return None
 
     async def _fetch_json(self, url, user_agent) -> tuple[dict, int]:
         """Fetch JSON data with the specified user agent."""
-
         headers = {**XHR_REQUEST_HEADERS, "user-agent": user_agent}
         LOGGER.debug("Requesting data from '%s' with agent %s", url, user_agent)
 
@@ -484,29 +350,18 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             response = await self.websession.get(
                 url, headers=headers, cookies=self._cc.cookies
             )
-
-            # Try next user-agent for 429
             if response.status == 429:
                 return [None, 429]
 
             result_json = await response.json()
-
             if response.status == HTTPStatus.OK:
                 return [result_json, response.status]
 
-            # Sample errors:
-            #   {'finance':{'result': None, 'error': {'code': 'Unauthorized', 'description': 'Invalid Crumb'}}}
-            #   {'finance':{'result': None, 'error': {'code': 'Unauthorized', 'description': 'Invalid Cookie'}}}
             finance_error_code_tuple = (
                 YahooSymbolUpdateCoordinator.get_finance_error_code(result_json)
             )
-
             if finance_error_code_tuple:
-                (
-                    finance_error_code,
-                    finance_error_description,
-                ) = finance_error_code_tuple
-
+                finance_error_code, finance_error_description = finance_error_code_tuple
                 LOGGER.info(
                     "Received status %d (%s %s) for %s",
                     response.status,
@@ -514,12 +369,9 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     finance_error_description,
                     url,
                 )
-
-                # Reset crumb so that it gets recalculated
                 if finance_error_code == "Unauthorized":
                     LOGGER.info("Resetting crumbs")
                     self._cc.reset()
-
             else:
                 LOGGER.info(
                     "Received status %d for %s, result=%s",
@@ -527,19 +379,16 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     url,
                     result_json,
                 )
-
         return [None, response.status]
 
     async def build_request_url(self) -> str:
         """Build the request url."""
         url = BASE + ",".join(self._symbols)
-
         crumb = self._cc.crumb
         if crumb is None:
             crumb = await self._cc.try_get_crumb_cookies()
         if crumb is not None:
             url = url + "&crumb=" + crumb
-
         return url
 
     @staticmethod
@@ -551,35 +400,29 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 finance_error = finance.get("error")
                 if finance_error:
                     return finance_error.get("code"), finance_error.get("description")
-
         return None
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Return updated data if new JSON is valid.
-
-        The exception will get properly handled in the caller (DataUpdateCoordinator.async_refresh)
-        which also updates last_update_success. UpdateFailed is raised if JSON is invalid.
-        """
-
+        """Return updated data if new JSON is valid."""
         retry_after = RETRY_INTERVALS[min(self.failed_count, len(RETRY_INTERVALS) - 1)]
 
         try:
-            json = await self.get_json()
+            json_data = await self.get_json()
         except (TimeoutError, aiohttp.ClientError) as error:
             self.failed_count += 1
             raise UpdateFailed(error, retry_after=retry_after) from error
 
-        if json is None:
+        if json_data is None:
             self.failed_count += 1
             raise UpdateFailed("No data received", retry_after=retry_after)
 
-        if "quoteResponse" not in json:
+        if "quoteResponse" not in json_data:
             self.failed_count += 1
             raise UpdateFailed(
                 "Data invalid, 'quoteResponse' not found.", retry_after=retry_after
             )
 
-        quoteResponse = json["quoteResponse"]  # pylint: disable=invalid-name
+        quoteResponse = json_data["quoteResponse"]  # noqa: N806
 
         if "error" in quoteResponse:
             if quoteResponse["error"] is not None:
@@ -612,11 +455,7 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def process_json_result(self, result) -> tuple[bool, dict[str, Any]]:
         """Process json result and return (error status, updated data)."""
-
-        # Using current data if available. If returned data is missing then we might be
-        # able to use previous data.
         data = self.data or {}
-
         symbols = self._symbols.copy()
         error_encountered = False
 
@@ -626,11 +465,7 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if symbol in symbols:
                 symbols.remove(symbol)
             else:
-                # Sometimes data for USDEUR=X just contains EUR=X, try to fix such
-                # symbols. The source of truth is the symbol in the data since data
-                # pieces could be out of order.
                 fixed_symbol = self.fix_conversion_symbol(symbol, symbol_data)
-
                 if fixed_symbol in symbols:
                     symbols.remove(fixed_symbol)
                     symbol = fixed_symbol
@@ -639,7 +474,6 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     error_encountered = True
 
             data[symbol] = self.parse_symbol_data(symbol_data)
-
             LOGGER.debug(
                 "Updated %s to %s",
                 symbol,
@@ -651,8 +485,3 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             error_encountered = True
 
         return (error_encountered, data)
-
-
-def debug_log_response(response: aiohttp.ClientResponse, title: str) -> None:
-    """Debug log the response."""
-    LOGGER.debug("%s: %d, %s", title, response.status, response.reason)

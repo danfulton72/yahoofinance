@@ -52,6 +52,7 @@ DATA_POST_MARKET_PRICE: Final = "postMarketPrice"
 DATA_PRE_MARKET_STATE: Final = "PRE"
 DATA_POST_MARKET_STATE: Final = "POST"
 
+CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_DECIMAL_PLACES: Final = "decimal_places"
 CONF_INCLUDE_FIFTY_DAY_VALUES: Final = "include_fifty_day_values"
 CONF_INCLUDE_POST_VALUES: Final = "include_post_values"
@@ -61,19 +62,18 @@ CONF_INCLUDE_FIFTY_TWO_WEEK_VALUES: Final = "include_fifty_two_week_values"
 CONF_INCLUDE_DIVIDEND_VALUES: Final = "include_dividend_values"
 CONF_SHOW_TRENDING_ICON: Final = "show_trending_icon"
 CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT = "show_currency_symbol_as_unit"
-CONF_SHOW_OFF_MARKET_VALUES= "show_off_market_values"
+CONF_SHOW_OFF_MARKET_VALUES = "show_off_market_values"
 CONF_TARGET_CURRENCY: Final = "target_currency"
 CONF_NO_UNIT: Final = "no_unit"
+CONF_SYMBOLS: Final = "symbols"
 
 DEFAULT_CONF_DECIMAL_PLACES: Final = 2
-
 DEFAULT_CONF_INCLUDE_DIVIDEND_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_FIFTY_DAY_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_FIFTY_TWO_WEEK_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_POST_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_PRE_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_TWO_HUNDRED_DAY_VALUES: Final = False
-
 DEFAULT_CONF_SHOW_TRENDING_ICON: Final = False
 DEFAULT_CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT: Final = False
 DEFAULT_CONF_SHOW_OFF_MARKET_VALUES = False
@@ -148,7 +148,6 @@ PERCENTAGE_DATA_KEYS_NEEDING_MULTIPLICATION: Final = [
     "fiftyTwoWeekHighChangePercent",
 ]
 
-
 # Defaults for missing numeric keys
 NUMERIC_DATA_DEFAULTS: Final = {DATA_DIVIDEND_DATE: None}
 
@@ -184,7 +183,6 @@ INITIAL_REQUEST_HEADERS: Final = {
     "accept-language": "en-US,en;q=0.9",
     "user-agent": "Mozilla/5.0",
 }
-""" Headers for INITIAL_URL. The limited headers are an attempt to avoid `Got more than 8190 byte` error. """
 
 USER_AGENTS_FOR_XHR: Final = [
     "Mozilla/5.0",
@@ -196,9 +194,7 @@ XHR_REQUEST_HEADERS: Final = {
     "accept-encoding": "gzip,deflate,br,zstd",
     "accept-language": "en-US,en;q=0.9",
 }
-""" Headers for all XHR requests. """
 
-CONF_SYMBOLS: Final = "symbols"
 DEFAULT_CURRENCY: Final = "USD"
 DEFAULT_CURRENCY_SYMBOL: Final = "$"
 DOMAIN: Final = "yahoofinance"
@@ -209,16 +205,11 @@ MANUAL_SCAN_INTERVAL: Final = "manual"
 MINIMUM_SCAN_INTERVAL: Final = timedelta(seconds=30)
 
 CRUMB_RETRY_DELAY: Final = 15
-"""Default duration for crumb re-try request."""
-
 CRUMB_RETRY_DELAY_429: Final = 60
-"""Duration for crumb re-try when receiving 429 code."""
-
 TOO_MANY_CRUMB_RETRY_FAILURES_DELAY: Final = 300
 TOO_MANY_CRUMB_RETRY_FAILURES_COUNT: Final = 5
 
 MAX_LINE_SIZE: Final = 8190 * 5
-"""Overide the default aiohttp max line size to avoid `Got more than 8190 byte` error."""
 
 CURRENCY_CODES: Final = {
     "aud": "$",

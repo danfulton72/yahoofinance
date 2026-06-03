@@ -1,0 +1,61 @@
+{
+  "title": "Yahoo Finance",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Yahoo Finance Setup",
+        "description": "Enter the symbols to track, separated by commas. Examples: AAPL, MSFT, ^GSPC, GBPUSD=X, EMIM.L\n\nNote: This integration works best in US mainland. GDPR regions may experience failures.",
+        "data": {
+          "symbols": "Symbols (e.g. AAPL, MSFT, ^GSPC)",
+          "scan_interval": "Update interval (hours, 1\u201324)"
+        },
+        "data_description": {
+          "scan_interval": "How often to fetch prices from Yahoo Finance. Minimum 1 hour, maximum 24 hours.",
+          "symbols": "Separate multiple symbols with commas or spaces. Use Yahoo Finance ticker format, e.g. AAPL, ^GSPC, GBPUSD=X, EMIM.L"
+        }
+      }
+    },
+    "error": {
+      "no_symbols": "Please enter at least one valid symbol."
+    },
+    "abort": {
+      "already_configured": "This integration is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Yahoo Finance Options",
+        "description": "Update tracked symbols and configure display options.",
+        "data": {
+          "symbols": "Symbols (comma-separated, e.g. AAPL, MSFT, ^GSPC)",
+          "scan_interval": "Update interval (hours, 1\u201324)",
+          "decimal_places": "Decimal places (-1 = no rounding, 0 = integer)",
+          "show_trending_icon": "Show trending icon (up/down/neutral) instead of currency icon",
+          "show_currency_symbol_as_unit": "Show currency symbol (e.g. $) instead of code (e.g. USD) as unit",
+          "show_off_market_values": "Show pre/post market price as main sensor value when market is closed",
+          "include_pre_values": "Include pre-market price, change and time attributes",
+          "include_post_values": "Include post-market price, change and time attributes",
+          "include_fifty_day_values": "Include 50-day average attributes",
+          "include_two_hundred_day_values": "Include 200-day average attributes",
+          "include_fifty_two_week_values": "Include 52-week high/low attributes",
+          "include_dividend_values": "Include dividend attributes (date, rate, yield)"
+        },
+        "data_description": {
+          "scan_interval": "How often to fetch prices from Yahoo Finance. Minimum 1 hour, maximum 24 hours.",
+          "symbols": "Separate multiple symbols with commas or spaces. Use Yahoo Finance ticker format, e.g. AAPL, ^GSPC, GBPUSD=X, EMIM.L",
+          "decimal_places": "Number of decimal places to round prices to. Use -1 to disable rounding, 0 for whole numbers."
+        }
+      }
+    },
+    "error": {
+      "no_symbols": "Please enter at least one valid symbol."
+    }
+  },
+  "services": {
+    "refresh_symbols": {
+      "name": "Refresh Symbols",
+      "description": "Manually trigger a refresh of all Yahoo Finance symbol data."
+    }
+  }
+}

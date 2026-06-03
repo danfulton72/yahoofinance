@@ -1,12 +1,11 @@
 {
   "domain": "yahoofinance",
   "name": "Yahoo Finance",
+  "version": "2.0.0",
+  "codeowners": [],
+  "config_flow": true,
   "documentation": "https://github.com/iprak/yahoofinance",
-  "requirements": [],
-  "dependencies": [],
-  "codeowners": [
-    "@iprak"
-  ],
-  "issue_tracker": "https://github.com/iprak/yahoofinance/issues",
-  "version": "1.5.5"
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": []
 }
