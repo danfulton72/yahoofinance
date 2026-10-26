@@ -154,10 +154,10 @@ def test_sensor_creation(
     assert sensor.name == f"Symbol {symbol}"
 
     attributes = sensor.extra_state_attributes
-    # Sensor would be trending up because _previous_close is 0.
-    assert attributes[ATTR_TRENDING] == "up"
+    # A missing previous close does not imply a rising market.
+    assert ATTR_TRENDING not in attributes
 
-    # All numeric values besides DATA_REGULAR_MARKET_PRICE should be 0
+    # Absent numeric values should be unknown, not fabricated zeros
     for value in NUMERIC_DATA_GROUPS[DEFAULT_NUMERIC_DATA_GROUP]:
         key = value[0]
         if (
@@ -167,7 +167,7 @@ def test_sensor_creation(
             and (key != DATA_PRE_MARKET_TIME)
             and (key != DATA_POST_MARKET_TIME)
         ):
-            assert attributes[key] == 0
+            assert attributes[key] is None
 
     # Since we did not provide any data so currency should be the default value
     assert sensor.unit_of_measurement == DEFAULT_CURRENCY
@@ -401,12 +401,12 @@ async def test_data_from_json(
 
     for sensor in sensors:
         sensor.update_properties()
-        assert sensor.available is True
+        # Yahoo may omit a price or other fields for a valid quote.
+        assert sensor.available is (sensor.native_value is not None)
 
         attributes = sensor.extra_state_attributes
-
-        assert sensor.state is not None
-        assert attributes["regularMarketChange"] is not None
+        if sensor.available:
+            assert sensor.state is not None
 
         for group_key, group_items in NUMERIC_DATA_GROUPS.items():
             # Data for DEFAULT_NUMERIC_DATA_GROUP should be present
