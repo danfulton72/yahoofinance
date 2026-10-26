@@ -443,6 +443,7 @@ async def test_add_symbol_schedules_single_refresh(
         assert mock_coordinator.add_symbol("B")
     assert mock_call_later.call_count == 1
 
+
 def test_missing_numeric_fields_remain_unknown() -> None:
     """Missing quote values must never masquerade as real zeros."""
     from custom_components.yahoofinance.const import DATA_REGULAR_MARKET_PRICE

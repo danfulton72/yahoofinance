@@ -396,6 +396,7 @@ async def test_unload_cancels_delayed_refresh(hass: HomeAssistant, mock_fetch) -
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert coordinator._cancel_delayed_refresh is None
 
+
 async def test_migrate_manual_interval(hass: HomeAssistant, mock_fetch) -> None:
     """Manual polling survives migrating an older config entry."""
     from custom_components.yahoofinance.const import MANUAL_SCAN_INTERVAL
