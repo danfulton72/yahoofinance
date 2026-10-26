@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to bump for the release
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: read
@@ -42,14 +48,18 @@ jobs:
         run: pip install -r requirements_test.txt
       - name: Ruff
         run: |
-          ruff check custom_components tests
-          ruff format --check custom_components tests
+          ruff check custom_components tests scripts
+          ruff format --check custom_components tests scripts
       - name: Pytest
         run: pytest
 
   release:
     name: Publish validated release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Pushes to master release automatically (patch) when the integration
+    # changed. Run the workflow manually on master to choose minor or major.
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [hacs, hassfest, tests]
     runs-on: ubuntu-latest
     permissions:
@@ -64,18 +74,32 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Calculate next patch version
+      - name: Decide whether to release
         id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          BUMP: ${{ inputs.bump || 'patch' }}
         run: |
           git fetch --tags --force origin
-          VERSION=$(python scripts/version.py next)
+          if [ "$EVENT" = "push" ] && ! python scripts/version.py changed; then
+            echo "Integration unchanged since the last release; nothing to publish."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION=$(python scripts/version.py next --bump "$BUMP")
+          echo "release=true" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing v$VERSION"
+          echo "Publishing v$VERSION ($BUMP)"
 
-      - name: Commit synchronized manifest to master
+      # The version bump is committed on top of the validated commit and only
+      # the tag is pushed, so master is never written to (works with branch
+      # protection) and the release contains exactly the validated code.
+      - name: Tag release commit
+        if: steps.version.outputs.release == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           python scripts/version.py set "$VERSION"
           python scripts/version.py check "$VERSION"
@@ -83,24 +107,19 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add custom_components/yahoofinance/manifest.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: sync manifest to v$VERSION [skip ci]"
+            git commit -m "chore: release $TAG"
           fi
-          # Refuse to release an outdated commit if master advanced during validation.
-          git push origin HEAD:master
-
-      - name: Create and push matching version tag
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "refs/tags/$TAG"
 
       - name: Package integration
+        if: steps.version.outputs.release == 'true'
         run: |
           cd custom_components/yahoofinance
           zip -r "${{ github.workspace }}/yahoofinance.zip" . -x "__pycache__/*"
 
       - name: Publish GitHub release
+        if: steps.version.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}

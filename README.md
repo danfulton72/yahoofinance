@@ -115,7 +115,8 @@ filter:
 
 ## Breaking changes
 
-- **2.1.0** – Configuration moved into entry options and the update interval is now set as a duration. Entries from 2.0.0 are migrated automatically. YAML configuration is imported instead of rejected.
+- **2.1.1** – Numeric attributes Yahoo doesn't report are now `null` instead of `0`, e.g. `preMarketPrice` outside pre-market or `dividendRate` for non-dividend stocks. Templates that do maths on them should handle `none`, e.g. `state_attr('sensor.yahoofinance_aapl', 'dividendRate') | float(0)`.
+- **2.1.1** – Configuration moved into entry options and the update interval is now set as a duration. Entries from 2.0.0 are migrated automatically. YAML configuration is imported instead of rejected.
 - **2.0.0** – Configuration moved from YAML to the UI.
 - **1.5.0** – Dividend values are controlled by `include_dividend_values`, and all optional attribute groups are excluded by default.
 
@@ -125,3 +126,11 @@ filter:
 pip install -r requirements_test.txt
 pytest
 ```
+
+### Releases
+
+Releases are published by the **Validate** workflow after HACS validation, hassfest and the tests pass:
+
+- **Automatic:** a push to `master` publishes the next patch release, but only if something under `custom_components/` or `hacs.json` changed since the last release. Docs and CI changes don't publish a release.
+- **Manual:** to publish a minor or major release, run **Actions → Validate → Run workflow** on `master` and choose the bump.
+- **Version:** the release tag points at a commit that sets the manifest version. Nothing is pushed to `master`, so branch protection is fine, and the manifest on `master` can lag behind the latest tag.
