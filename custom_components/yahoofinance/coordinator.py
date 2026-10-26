@@ -394,7 +394,10 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 finance_error_code,
                 finance_error_description,
             )
-            if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN) or finance_error_code == "Unauthorized":
+            if (
+                status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
+                or finance_error_code == "Unauthorized"
+            ):
                 LOGGER.info("Resetting crumbs")
                 self._cc.reset()
         else:
@@ -451,7 +454,9 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if not isinstance(quoteResponse, dict):
             self.failed_count += 1
-            raise UpdateFailed("Invalid quoteResponse structure", retry_after=retry_after)
+            raise UpdateFailed(
+                "Invalid quoteResponse structure", retry_after=retry_after
+            )
 
         if quoteResponse.get("error") is not None:
             self.failed_count += 1

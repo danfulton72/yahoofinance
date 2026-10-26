@@ -294,8 +294,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ]
         hours = merged.get(CONF_SCAN_INTERVAL)
         try:
-            seconds = (int(DEFAULT_SCAN_INTERVAL.total_seconds())
-                       if hours == MANUAL_SCAN_INTERVAL else int(hours) * 3600)
+            seconds = (
+                int(DEFAULT_SCAN_INTERVAL.total_seconds())
+                if hours == MANUAL_SCAN_INTERVAL
+                else int(hours) * 3600
+            )
             if hours == MANUAL_SCAN_INTERVAL:
                 merged[CONF_MANUAL_UPDATE] = True
         except (TypeError, ValueError):

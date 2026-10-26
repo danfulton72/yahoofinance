@@ -446,6 +446,7 @@ async def test_add_symbol_schedules_single_refresh(
 def test_missing_numeric_fields_remain_unknown() -> None:
     """Missing quote values must never masquerade as real zeros."""
     from custom_components.yahoofinance.const import DATA_REGULAR_MARKET_PRICE
+
     value = YahooSymbolUpdateCoordinator.parse_symbol_data({"symbol": "AAPL"})
     assert value[DATA_REGULAR_MARKET_PRICE] is None
 
@@ -453,6 +454,7 @@ def test_missing_numeric_fields_remain_unknown() -> None:
 def test_actual_zero_is_preserved() -> None:
     """A real zero remains distinct from missing quote data."""
     from custom_components.yahoofinance.const import DATA_REGULAR_MARKET_PRICE
+
     value = YahooSymbolUpdateCoordinator.parse_symbol_data(
         {"symbol": "AAPL", DATA_REGULAR_MARKET_PRICE: 0}
     )
