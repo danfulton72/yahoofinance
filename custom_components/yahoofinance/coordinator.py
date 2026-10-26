@@ -62,7 +62,22 @@ class CrumbCoordinator:
     def get_static_instance(
         hass: HomeAssistant, websession: aiohttp.ClientSession
     ) -> CrumbCoordinator:
-        """Get the singleton static CrumbCoordinator instance."""
+        """Get the singleton static CrumbCoordinator instance.
+
+        Home Assistant detaches (closes) client sessions created via
+        ``async_create_clientsession`` when the owning config entry is unloaded
+        or on shutdown. A cached coordinator that still references a closed
+        session fails on the next request with ``RuntimeError: Session is
+        closed``, leaving the config entry stuck in setup_error. Drop the
+        cached instance in that case so it is re-created bound to the live
+        session.
+        """
+        instance = CrumbCoordinator._instance
+        if instance is not None and instance._websession.closed:
+            LOGGER.info(
+                "Cached crumb coordinator session is closed; creating a fresh instance"
+            )
+            CrumbCoordinator._instance = None
         if CrumbCoordinator._instance is None:
             CrumbCoordinator._instance = CrumbCoordinator(hass, websession)
         return CrumbCoordinator._instance
