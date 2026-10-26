@@ -122,6 +122,6 @@ filter:
 ## Development
 
 ```bash
-pip install pytest-homeassistant-custom-component
+pip install -r requirements_test.txt
 pytest
 ```
