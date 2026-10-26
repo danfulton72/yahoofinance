@@ -1,14 +1,13 @@
 {
   "domain": "yahoofinance",
   "name": "Yahoo Finance",
-  "version": "2.0.0",
-  "codeowners": [
-    "@danfulton72"
-  ],
+  "codeowners": ["@danfulton72"],
   "config_flow": true,
   "documentation": "https://github.com/danfulton72/yahoofinance",
-  "integration_type": "hub",
+  "integration_type": "service",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/danfulton72/yahoofinance/issues",
   "requirements": [],
-  "issue_tracker": "https://github.com/danfulton72/yahoofinance/issues"
+  "single_config_entry": false,
+  "version": "2.1.0"
 }

@@ -10,44 +10,17 @@ logger:
   logs:
     custom_components.yahoofinance: debug
 
-yahoofinance:
-  show_trending_icon: true
-  show_currency_symbol_as_unit: true
-  show_off_market_values: true
-
-  include_dividend_values: true
-  include_fifty_day_values: true
-  include_fifty_two_week_values: true
-  include_post_values: true
-  include_pre_values: true
-  include_two_hundred_day_values: true
-
-  #Interval too small - will throw an error
-  #scan_interval: 30
-
-  #Update disabled
-  #scan_interval: "manual"
-
-  scan_interval: 45
-
-  symbols:
-    - symbol: "LGEN.L"
-      target_currency: usd
-    - symbol: "0P00008F5Y.L"
-    - symbol: GBPUSD=X
-      no_unit: true
-    - symbol: IDFCBANK.BO
-    - symbol: baba
-      target_currency: inr
-      #scan_interval: 30
-    - symbol: ^SSMI
-      no_unit: true
-    - symbol: EMIM.L
-      target_currency: EUR
-      scan_interval: 30
-    - symbol: AAPL
-    - symbol: USDINR=X
-      #scan_interval: 45
-    - symbol: ADYEN.AS
-      #scan_interval: "none"
-    - symbol: ISTNX
+# Yahoo Finance is configured from Settings > Devices & services.
+# Uncomment to test the YAML import path:
+# yahoofinance:
+#   show_trending_icon: true
+#   scan_interval: 45
+#   symbols:
+#     - symbol: "LGEN.L"
+#       target_currency: usd
+#     - symbol: GBPUSD=X
+#       no_unit: true
+#     - symbol: EMIM.L
+#       target_currency: EUR
+#       scan_interval: 30
+#     - AAPL

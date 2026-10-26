@@ -23,7 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import TEST_CRUMB, TEST_SYMBOL  # noqa: TID251
-from .conftest import create_mock_coordinator  # noqa: TID251
+from .conftest import create_mock_coordinator, mock_get_returning  # noqa: TID251
 
 TEST_SYMBOL2 = "RBOT.L"
 SECOND_TEST_SYMBOL = "^SSMI"
@@ -89,7 +89,8 @@ async def test_json_download_failure(
         mocked_crumb_coordinator,
         SESSION,
     )
-    mock_coordinator.websession.get = AsyncMock(side_effect=raised_exception)
+    mock_coordinator.websession = Mock()
+    mock_coordinator.websession.get = Mock(side_effect=raised_exception)
 
     existing_data = {TEST_SYMBOL: {DATA_REGULAR_MARKET_PRICE: random.random()}}
     mock_coordinator.data = existing_data
@@ -271,7 +272,8 @@ async def test_logging_when_process_json_result_reports_error(
     mock_response.status = HTTPStatus.NO_CONTENT
     mock_response.json = AsyncMock(return_value=mock_json)
 
-    mock_coordinator.websession.get = AsyncMock(return_value=mock_response)
+    mock_coordinator.websession = Mock()
+    mock_coordinator.websession.get = mock_get_returning(mock_response)
     mock_coordinator.process_json_result = Mock(return_value=(True, None))
 
     with patch.object(coordinator, "LOGGER") as mock_logger:
@@ -336,3 +338,107 @@ def test_manual_scan_interval(hass: HomeAssistant, mocked_crumb_coordinator) -> 
         SESSION,
     )
     assert mock_coordinator.update_interval is None
+
+
+async def test_initial_navigation_failure_returns_none(hass: HomeAssistant) -> None:
+    """A network error during navigation is reported as failure, not 'no consent'."""
+    session = Mock()
+    session.get = Mock(side_effect=aiohttp.ClientError("boom"))
+    instance = CrumbCoordinator(hass, session)
+
+    assert await instance.initial_navigation("https://example.com") is None
+    assert await instance.try_get_crumb_cookies() is None
+
+
+@pytest.mark.parametrize(
+    "raised_exception", [aiohttp.ClientError("boom"), TimeoutError()]
+)
+async def test_crumb_page_network_error_is_handled(
+    hass: HomeAssistant, raised_exception
+) -> None:
+    """Crumb request errors do not propagate and schedule a retry."""
+    session = Mock()
+    session.get = Mock(side_effect=raised_exception)
+    instance = CrumbCoordinator(hass, session)
+
+    assert await instance.try_crumb_page() is None
+    assert instance.crumb is None
+    assert instance.retry_duration > 0
+
+
+async def test_crumb_page_success(hass: HomeAssistant) -> None:
+    """A successful crumb response is stored."""
+    response = Mock(status=HTTPStatus.OK)
+    response.text = AsyncMock(return_value=TEST_CRUMB)
+    session = Mock()
+    session.get = mock_get_returning(response)
+    instance = CrumbCoordinator(hass, session)
+
+    assert await instance.try_crumb_page() == TEST_CRUMB
+    assert instance.crumb == TEST_CRUMB
+    # The response context manager was exited, releasing the connection
+    session.get.return_value.__aexit__.assert_awaited()
+
+
+async def test_fetch_json_429_releases_response(
+    hass: HomeAssistant, mocked_crumb_coordinator
+) -> None:
+    """429 responses are released and reported."""
+    mock_coordinator = create_mock_coordinator(hass, mocked_crumb_coordinator)
+    response = Mock(status=HTTPStatus.TOO_MANY_REQUESTS)
+    mock_coordinator.websession = Mock()
+    mock_coordinator.websession.get = mock_get_returning(response)
+
+    assert await mock_coordinator._fetch_json("url", "agent") == (
+        None,
+        HTTPStatus.TOO_MANY_REQUESTS,
+    )
+    mock_coordinator.websession.get.return_value.__aexit__.assert_awaited()
+
+
+async def test_fetch_json_unauthorized_resets_crumb(
+    hass: HomeAssistant, mocked_crumb_coordinator
+) -> None:
+    """An Unauthorized finance error resets the crumb."""
+    mock_coordinator = create_mock_coordinator(hass, mocked_crumb_coordinator)
+    mocked_crumb_coordinator.crumb = TEST_CRUMB
+    response = Mock(status=HTTPStatus.UNAUTHORIZED)
+    response.json = AsyncMock(
+        return_value={
+            "finance": {"error": {"code": "Unauthorized", "description": "x"}}
+        }
+    )
+    mock_coordinator.websession = Mock()
+    mock_coordinator.websession.get = mock_get_returning(response)
+
+    assert await mock_coordinator._fetch_json("url", "agent") == (
+        None,
+        HTTPStatus.UNAUTHORIZED,
+    )
+    assert mocked_crumb_coordinator.crumb is None
+
+
+async def test_process_consent_releases_response(hass: HomeAssistant) -> None:
+    """The consent POST uses a context manager so the connection is released."""
+    response = Mock(status=HTTPStatus.OK, cookies=None, url="https://after")
+    session = Mock()
+    session.post = mock_get_returning(response)
+    instance = CrumbCoordinator(hass, session)
+    consent = coordinator.ConsentData(
+        need_consent=True, consent_content="", consent_post_url="https://consent"
+    )
+
+    assert await instance.process_consent(consent) is True
+    assert consent.successful_consent_url == "https://after"
+    session.post.return_value.__aexit__.assert_awaited()
+
+
+async def test_add_symbol_schedules_single_refresh(
+    hass: HomeAssistant, mocked_crumb_coordinator
+) -> None:
+    """Adding several symbols queues only one delayed refresh."""
+    mock_coordinator = create_mock_coordinator(hass, mocked_crumb_coordinator)
+    with patch.object(coordinator.event, "async_call_later") as mock_call_later:
+        assert mock_coordinator.add_symbol("A")
+        assert mock_coordinator.add_symbol("B")
+    assert mock_call_later.call_count == 1
