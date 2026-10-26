@@ -1,7 +1,9 @@
 {
   "domain": "yahoofinance",
   "name": "Yahoo Finance",
-  "codeowners": ["@danfulton72"],
+  "codeowners": [
+    "@danfulton72"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/danfulton72/yahoofinance",
   "integration_type": "service",
