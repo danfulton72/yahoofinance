@@ -232,7 +232,7 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for data_group in NUMERIC_DATA_GROUPS.values():
             for value in data_group:
                 key = value[0]
-                default_value = NUMERIC_DATA_DEFAULTS.get(key, 0)
+                default_value = NUMERIC_DATA_DEFAULTS.get(key)
                 data[key] = symbol_data.get(key, default_value)
         for key in STRING_DATA_KEYS:
             data[key] = symbol_data.get(key)
@@ -394,11 +394,13 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 finance_error_code,
                 finance_error_description,
             )
-            if finance_error_code == "Unauthorized":
+            if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN) or finance_error_code == "Unauthorized":
                 LOGGER.info("Resetting crumbs")
                 self._cc.reset()
         else:
             LOGGER.info("Yahoo Finance returned HTTP %d", status)
+            if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                self._cc.reset()
         return None, status
 
     async def build_request_url(self) -> str:
@@ -439,13 +441,17 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 retry_after = max(retry_after, self._cc.retry_duration)
             raise UpdateFailed("No data received", retry_after=retry_after)
 
-        if "quoteResponse" not in json_data:
+        if not isinstance(json_data, dict) or "quoteResponse" not in json_data:
             self.failed_count += 1
             raise UpdateFailed(
                 "Data invalid, 'quoteResponse' not found.", retry_after=retry_after
             )
 
         quoteResponse = json_data["quoteResponse"]  # noqa: N806
+
+        if not isinstance(quoteResponse, dict):
+            self.failed_count += 1
+            raise UpdateFailed("Invalid quoteResponse structure", retry_after=retry_after)
 
         if quoteResponse.get("error") is not None:
             self.failed_count += 1
@@ -458,7 +464,7 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
         result = quoteResponse["result"]
-        if result is None:
+        if not isinstance(result, list):
             self.failed_count += 1
             raise UpdateFailed(
                 "Data invalid, 'result' is None", retry_after=retry_after
@@ -484,7 +490,11 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         error_encountered = False
 
         for symbol_data in result:
-            symbol = symbol_data["symbol"]
+            symbol = symbol_data.get("symbol")
+            if not symbol:
+                LOGGER.warning("Skipping quote without symbol")
+                error_encountered = True
+                continue
 
             if symbol in symbols:
                 symbols.remove(symbol)
