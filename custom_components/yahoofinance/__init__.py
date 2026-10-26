@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_DECIMAL_PLACES,
@@ -103,11 +103,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_config = _build_domain_config(symbols, merged_options)
     scan_interval = _parse_scan_interval(merged_options)
 
-    websession = async_create_clientsession(
-        hass, max_field_size=MAX_LINE_SIZE, max_line_size=MAX_LINE_SIZE
-    )
-
-    crumb_coordinator = CrumbCoordinator.get_static_instance(hass, websession)
+    # Home Assistant owns this session; do not bind credentials to a global singleton.
+    websession = async_get_clientsession(hass)
+    crumb_coordinator = CrumbCoordinator(hass, websession)
     crumb = await crumb_coordinator.try_get_crumb_cookies()
     if crumb is None:
         LOGGER.warning("Unable to get crumb during setup, will retry on first update")
@@ -154,9 +152,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if entry_data:
+            for coordinator in entry_data[HASS_DATA_COORDINATORS].values():
+                coordinator.cancel_delayed_refresh()
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
-            # No active entries remain: release the shared authentication state.
-            CrumbCoordinator._instance = None
     return unload_ok

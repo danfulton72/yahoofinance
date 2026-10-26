@@ -43,7 +43,7 @@ DEFAULT_SCAN_INTERVAL_HOURS = 6
 def _parse_symbols(raw: str) -> list[str]:
     """Parse a comma/space separated string into an uppercase symbol list."""
     symbols = re.split(r"[\s,]+", raw.strip())
-    return [s.strip().upper() for s in symbols if s.strip()]
+    return list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
 
 
 class YahooFinanceConfigFlow(config_entries.ConfigFlow, domain="yahoofinance"):
