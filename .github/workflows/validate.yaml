@@ -46,3 +46,66 @@ jobs:
           ruff format --check custom_components tests
       - name: Pytest
         run: pytest
+
+  release:
+    name: Publish validated release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [hacs, hassfest, tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: yahoofinance-release-master
+      cancel-in-progress: false
+    steps:
+      - name: Checkout validated commit with tags
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Calculate next patch version
+        id: version
+        run: |
+          git fetch --tags --force origin
+          VERSION=$(python scripts/version.py next)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing v$VERSION"
+
+      - name: Commit synchronized manifest to master
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python scripts/version.py set "$VERSION"
+          python scripts/version.py check "$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/yahoofinance/manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync manifest to v$VERSION [skip ci]"
+          fi
+          # Refuse to release an outdated commit if master advanced during validation.
+          git push origin HEAD:master
+
+      - name: Create and push matching version tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Package integration
+        run: |
+          cd custom_components/yahoofinance
+          zip -r "${{ github.workspace }}/yahoofinance.zip" . -x "__pycache__/*"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" yahoofinance.zip \
+            --verify-tag \
+            --title "$TAG" \
+            --generate-notes
