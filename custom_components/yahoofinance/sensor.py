@@ -307,7 +307,11 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
         symbol_data = self._find_symbol_data(conversion_symbol)
 
         if symbol_data is not None:
-            value = value * self._get_market_price(symbol_data)
+            exchange_rate = self._get_market_price(symbol_data)
+            if exchange_rate is None:
+                self._waiting_on_conversion = True
+                return None
+            value *= exchange_rate
             LOGGER.debug("%s %s is %s", self._symbol, conversion_symbol, value)
         else:
             LOGGER.info(
@@ -317,6 +321,7 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
             )
             self._waiting_on_conversion = True
             self.coordinator.add_symbol(conversion_symbol)
+            return None
 
         return value
 

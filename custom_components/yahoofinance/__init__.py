@@ -51,7 +51,7 @@ def convert_to_float(value) -> float | None:
     """Convert specified value to float."""
     try:
         return float(value)
-    except:  # noqa: E722
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -155,6 +155,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
-        # Reset crumb singleton so next setup starts fresh
-        CrumbCoordinator._instance = None
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
+            # No active entries remain: release the shared authentication state.
+            CrumbCoordinator._instance = None
     return unload_ok

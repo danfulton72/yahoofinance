@@ -2,10 +2,13 @@
   "domain": "yahoofinance",
   "name": "Yahoo Finance",
   "version": "2.0.0",
-  "codeowners": [],
+  "codeowners": [
+    "@danfulton72"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/iprak/yahoofinance",
+  "documentation": "https://github.com/danfulton72/yahoofinance",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "requirements": []
+  "requirements": [],
+  "issue_tracker": "https://github.com/danfulton72/yahoofinance/issues"
 }

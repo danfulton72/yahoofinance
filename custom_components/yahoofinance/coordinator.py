@@ -199,7 +199,7 @@ class CrumbCoordinator:
                     self.crumb = await response.text()
                     if not self.crumb:
                         LOGGER.error("No crumb reported")
-                    LOGGER.info("Crumb page reported %s", self.crumb)
+                    LOGGER.debug("Crumb obtained successfully")
                     self._crumb_retry_count = 0
                     return self.crumb
                 if last_status == 429:
@@ -359,42 +359,40 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _fetch_json(self, url, user_agent) -> tuple[dict, int]:
         """Fetch JSON data with the specified user agent."""
         headers = {**XHR_REQUEST_HEADERS, "user-agent": user_agent}
-        LOGGER.debug("Requesting data from '%s' with agent %s", url, user_agent)
+        LOGGER.debug("Requesting Yahoo Finance quote data with agent %s", user_agent)
 
         async with asyncio.timeout(REQUEST_TIMEOUT):
-            response = await self.websession.get(
+            async with self.websession.get(
                 url, headers=headers, cookies=self._cc.cookies
-            )
-            if response.status == 429:
-                return [None, 429]
+            ) as response:
+                if response.status == HTTPStatus.TOO_MANY_REQUESTS:
+                    return [None, response.status]
 
-            result_json = await response.json()
-            if response.status == HTTPStatus.OK:
-                return [result_json, response.status]
+                # Yahoo sometimes returns HTML when blocked or rate limited.
+                # Treat unexpected content as a failed request, not a crash.
+                try:
+                    result_json = await response.json()
+                except (aiohttp.ContentTypeError, ValueError):
+                    LOGGER.warning("Yahoo Finance returned a non-JSON response (HTTP %s)", response.status)
+                    return [None, response.status]
 
-            finance_error_code_tuple = (
-                YahooSymbolUpdateCoordinator.get_finance_error_code(result_json)
-            )
-            if finance_error_code_tuple:
-                finance_error_code, finance_error_description = finance_error_code_tuple
-                LOGGER.info(
-                    "Received status %d (%s %s) for %s",
-                    response.status,
-                    finance_error_code,
-                    finance_error_description,
-                    url,
-                )
-                if finance_error_code == "Unauthorized":
-                    LOGGER.info("Resetting crumbs")
-                    self._cc.reset()
-            else:
-                LOGGER.info(
-                    "Received status %d for %s, result=%s",
-                    response.status,
-                    url,
-                    result_json,
-                )
-        return [None, response.status]
+                if response.status == HTTPStatus.OK:
+                    return [result_json, response.status]
+
+                finance_error_code_tuple = self.get_finance_error_code(result_json)
+                if finance_error_code_tuple:
+                    finance_error_code, finance_error_description = finance_error_code_tuple
+                    LOGGER.info(
+                        "Yahoo Finance returned HTTP %d (%s: %s)",
+                        response.status,
+                        finance_error_code,
+                        finance_error_description,
+                    )
+                    if finance_error_code == "Unauthorized":
+                        self._cc.reset()
+                else:
+                    LOGGER.info("Yahoo Finance returned HTTP %d", response.status)
+                return [None, response.status]
 
     async def build_request_url(self) -> str:
         """Build the request url."""
