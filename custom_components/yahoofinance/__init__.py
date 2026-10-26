@@ -290,11 +290,17 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         merged = {**entry.data, **entry.options}
         merged[CONF_SYMBOLS] = [
             SymbolDefinition.from_stored(item).as_dict()
-            for item in entry.data.get(CONF_SYMBOLS, [])
+            for item in merged.get(CONF_SYMBOLS, [])
         ]
         hours = merged.get(CONF_SCAN_INTERVAL)
         try:
-            seconds = int(hours) * 3600
+            seconds = (
+                int(DEFAULT_SCAN_INTERVAL.total_seconds())
+                if hours == MANUAL_SCAN_INTERVAL
+                else int(hours) * 3600
+            )
+            if hours == MANUAL_SCAN_INTERVAL:
+                merged[CONF_MANUAL_UPDATE] = True
         except (TypeError, ValueError):
             seconds = int(DEFAULT_SCAN_INTERVAL.total_seconds())
         merged[CONF_SCAN_INTERVAL] = seconds

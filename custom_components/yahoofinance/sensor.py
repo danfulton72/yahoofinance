@@ -11,7 +11,6 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import ATTR_ATTRIBUTION
-from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
@@ -265,33 +264,21 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
 
     def _find_symbol_data(self, symbol: str):
         """Find data for the specified symbol, own coordinator first."""
-        coordinators: list[YahooSymbolUpdateCoordinator] = [self.coordinator]
-        for entry in self._hass.config_entries.async_entries(DOMAIN):
-            if entry.state is ConfigEntryState.LOADED:
-                coordinator = entry.runtime_data.coordinator
-                if coordinator is not self.coordinator:
-                    coordinators.append(coordinator)
-
-        for coordinator in coordinators:
-            data = coordinator.data
-            if data is not None:
-                symbol_data = data.get(symbol)
-                if symbol_data is not None:
-                    return symbol_data
-
-        return None
+        # Only rates owned by this coordinator trigger this entity to update.
+        return (self.coordinator.data or {}).get(symbol)
 
     def _get_market_price(self, symbol_data: dict) -> float | None:
         if not symbol_data:
             return None
         if not self._show_off_market_values:
-            return symbol_data[DATA_REGULAR_MARKET_PRICE]
+            return symbol_data.get(DATA_REGULAR_MARKET_PRICE)
         price_time = 0
         price = None
         for t, p in TIME_PRICE_DATA_DICT.items():
-            if price_time < symbol_data[t]:
-                price_time = symbol_data[t]
-                price = symbol_data[p]
+            timestamp = symbol_data.get(t)
+            if timestamp is not None and price_time < timestamp:
+                price_time = timestamp
+                price = symbol_data.get(p)
         return price
 
     def _get_target_currency_conversion(self) -> float | None:
