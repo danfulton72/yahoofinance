@@ -45,42 +45,15 @@ RETRY_INTERVALS = (10, 20, 30, 60)
 class CrumbCoordinator:
     """Class to gather crumb/cookie details."""
 
-    _instance = None
-
-    preferred_user_agent = ""
-
     def __init__(self, hass: HomeAssistant, websession: aiohttp.ClientSession) -> None:
         """Initialize."""
-        self.cookies: SimpleCookie[str] = None
+        self.cookies: SimpleCookie[str] | None = None
+        self.preferred_user_agent = ""
         self.crumb: str | None = None
         self._hass = hass
         self.retry_duration = CRUMB_RETRY_DELAY
         self._crumb_retry_count = 0
         self._websession = websession
-
-    @staticmethod
-    def get_static_instance(
-        hass: HomeAssistant, websession: aiohttp.ClientSession
-    ) -> CrumbCoordinator:
-        """Get the singleton static CrumbCoordinator instance.
-
-        Home Assistant detaches (closes) client sessions created via
-        ``async_create_clientsession`` when the owning config entry is unloaded
-        or on shutdown. A cached coordinator that still references a closed
-        session fails on the next request with ``RuntimeError: Session is
-        closed``, leaving the config entry stuck in setup_error. Drop the
-        cached instance in that case so it is re-created bound to the live
-        session.
-        """
-        instance = CrumbCoordinator._instance
-        if instance is not None and instance._websession.closed:
-            LOGGER.info(
-                "Cached crumb coordinator session is closed; creating a fresh instance"
-            )
-            CrumbCoordinator._instance = None
-        if CrumbCoordinator._instance is None:
-            CrumbCoordinator._instance = CrumbCoordinator(hass, websession)
-        return CrumbCoordinator._instance
 
     def reset(self) -> None:
         """Reset crumb and cookies."""
@@ -150,33 +123,30 @@ class CrumbCoordinator:
     async def process_consent(self, consent_data: ConsentData) -> bool:
         """Process GDPR consent."""
         form_data = self.build_consent_form_data(consent_data.consent_content)
-        LOGGER.debug("Posting consent %s", str(form_data))
+        LOGGER.debug("Posting Yahoo consent form")
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
-                response = await self._websession.post(
+                async with self._websession.post(
                     consent_data.consent_post_url,
                     data=form_data,
                     headers=INITIAL_REQUEST_HEADERS,
-                )
-                if response.status != HTTPStatus.OK:
-                    LOGGER.error(
-                        "Failed to post consent %d, reason=%s",
-                        response.status,
-                        response.reason,
-                    )
-                    return False
-                if response.cookies:
-                    self.cookies = response.cookies
-                consent_data.successful_consent_url = response.url
-                LOGGER.debug(
-                    "After consent processing, have cookies=%s", bool(self.cookies)
-                )
-                return True
+                ) as response:
+                    return self._process_consent_response(response, consent_data)
         except TimeoutError as ex:
             LOGGER.error("Timed out processing consent. %s", ex)
         except aiohttp.ClientError as ex:
             LOGGER.error("Error accessing consent url. %s", ex)
         return False
+
+    def _process_consent_response(self, response, consent_data: ConsentData) -> bool:
+        """Process the consent response while its connection is open."""
+        if response.status != HTTPStatus.OK:
+            LOGGER.error("Failed to post consent %d, reason=%s", response.status, response.reason)
+            return False
+        if response.cookies:
+            self.cookies = response.cookies
+        consent_data.successful_consent_url = response.url
+        return True
 
     def cookies_missing(self) -> bool:
         """Check if we don't have any cookies."""
@@ -199,7 +169,7 @@ class CrumbCoordinator:
                     self.crumb = await response.text()
                     if not self.crumb:
                         LOGGER.error("No crumb reported")
-                    LOGGER.info("Crumb page reported %s", self.crumb)
+                    LOGGER.debug("Crumb obtained successfully")
                     self._crumb_retry_count = 0
                     return self.crumb
                 if last_status == 429:
@@ -286,6 +256,7 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.websession = websession
         self._cc = cc
         self.failed_count = 0
+        self._cancel_delayed_refresh = None
 
         if isinstance(update_interval, str) and update_interval == MANUAL_SCAN_INTERVAL:
             update_interval = None
@@ -303,17 +274,25 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_request_refresh_later(self, _now):
         """Request async_request_refresh."""
+        self._cancel_delayed_refresh = None
         await self.async_request_refresh()
+
+    def cancel_delayed_refresh(self) -> None:
+        """Cancel a queued refresh when the entry unloads."""
+        if self._cancel_delayed_refresh is not None:
+            self._cancel_delayed_refresh()
+            self._cancel_delayed_refresh = None
 
     def add_symbol(self, symbol: str) -> bool:
         """Add symbol to the symbol list."""
         if symbol not in self._symbols:
             self._symbols.append(symbol)
-            event.async_call_later(
-                self.hass,
-                DELAY_ASYNC_REQUEST_REFRESH,
-                self._async_request_refresh_later,
-            )
+            if self._cancel_delayed_refresh is None:
+                self._cancel_delayed_refresh = event.async_call_later(
+                    self.hass,
+                    DELAY_ASYNC_REQUEST_REFRESH,
+                    self._async_request_refresh_later,
+                )
             LOGGER.info(
                 "Added %s and requested update in %d seconds",
                 symbol,
@@ -359,42 +338,40 @@ class YahooSymbolUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _fetch_json(self, url, user_agent) -> tuple[dict, int]:
         """Fetch JSON data with the specified user agent."""
         headers = {**XHR_REQUEST_HEADERS, "user-agent": user_agent}
-        LOGGER.debug("Requesting data from '%s' with agent %s", url, user_agent)
+        LOGGER.debug("Requesting Yahoo Finance quote data with agent %s", user_agent)
 
         async with asyncio.timeout(REQUEST_TIMEOUT):
-            response = await self.websession.get(
+            async with self.websession.get(
                 url, headers=headers, cookies=self._cc.cookies
-            )
-            if response.status == 429:
-                return [None, 429]
+            ) as response:
+                if response.status == HTTPStatus.TOO_MANY_REQUESTS:
+                    return [None, response.status]
 
-            result_json = await response.json()
-            if response.status == HTTPStatus.OK:
-                return [result_json, response.status]
+                # Yahoo sometimes returns HTML when blocked or rate limited.
+                # Treat unexpected content as a failed request, not a crash.
+                try:
+                    result_json = await response.json()
+                except (aiohttp.ContentTypeError, ValueError):
+                    LOGGER.warning("Yahoo Finance returned a non-JSON response (HTTP %s)", response.status)
+                    return [None, response.status]
 
-            finance_error_code_tuple = (
-                YahooSymbolUpdateCoordinator.get_finance_error_code(result_json)
-            )
-            if finance_error_code_tuple:
-                finance_error_code, finance_error_description = finance_error_code_tuple
-                LOGGER.info(
-                    "Received status %d (%s %s) for %s",
-                    response.status,
-                    finance_error_code,
-                    finance_error_description,
-                    url,
-                )
-                if finance_error_code == "Unauthorized":
-                    LOGGER.info("Resetting crumbs")
-                    self._cc.reset()
-            else:
-                LOGGER.info(
-                    "Received status %d for %s, result=%s",
-                    response.status,
-                    url,
-                    result_json,
-                )
-        return [None, response.status]
+                if response.status == HTTPStatus.OK:
+                    return [result_json, response.status]
+
+                finance_error_code_tuple = self.get_finance_error_code(result_json)
+                if finance_error_code_tuple:
+                    finance_error_code, finance_error_description = finance_error_code_tuple
+                    LOGGER.info(
+                        "Yahoo Finance returned HTTP %d (%s: %s)",
+                        response.status,
+                        finance_error_code,
+                        finance_error_description,
+                    )
+                    if finance_error_code == "Unauthorized":
+                        self._cc.reset()
+                else:
+                    LOGGER.info("Yahoo Finance returned HTTP %d", response.status)
+                return [None, response.status]
 
     async def build_request_url(self) -> str:
         """Build the request url."""
