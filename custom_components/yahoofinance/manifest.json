@@ -1,9 +1,6 @@
 {
   "domain": "yahoofinance",
   "name": "Yahoo Finance",
-  "categories": [
-    "finance"
-  ],
   "codeowners": [
     "@danfulton72"
   ],
