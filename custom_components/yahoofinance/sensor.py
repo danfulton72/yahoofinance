@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
@@ -10,9 +11,11 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import ATTR_ATTRIBUTION
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import async_generate_entity_id
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
@@ -44,8 +47,6 @@ from .const import (
     DEFAULT_CURRENCY,
     DEFAULT_NUMERIC_DATA_GROUP,
     DOMAIN,
-    HASS_DATA_CONFIG,
-    HASS_DATA_COORDINATORS,
     LOGGER,
     NUMERIC_DATA_GROUPS,
     PERCENTAGE_DATA_KEYS_NEEDING_MULTIPLICATION,
@@ -54,29 +55,38 @@ from .const import (
 from .coordinator import YahooSymbolUpdateCoordinator
 from .dataclasses import SymbolDefinition
 
+if TYPE_CHECKING:
+    from . import YahooFinanceConfigEntry
+
 ENTITY_ID_FORMAT = SENSOR_DOMAIN + "." + DOMAIN + "_{}"
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: YahooFinanceConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Yahoo Finance sensor platform from a config entry."""
-    coordinators: dict[timedelta, YahooSymbolUpdateCoordinator] = hass.data[DOMAIN][
-        config_entry.entry_id
-    ][HASS_DATA_COORDINATORS]
-    domain_config = hass.data[DOMAIN][config_entry.entry_id][HASS_DATA_CONFIG]
+    runtime_data = config_entry.runtime_data
+    domain_config = runtime_data.config
     symbol_definitions: list[SymbolDefinition] = domain_config[CONF_SYMBOLS]
+
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, config_entry.entry_id)},
+        name=config_entry.title,
+        manufacturer="Yahoo",
+        entry_type=DeviceEntryType.SERVICE,
+        configuration_url="https://finance.yahoo.com",
+    )
 
     sensors = [
         YahooFinanceSensor(
-            hass, coordinators[symbol.scan_interval], symbol, domain_config
+            hass, runtime_data.coordinator, symbol, domain_config, device_info
         )
         for symbol in symbol_definitions
     ]
 
-    async_add_entities(sensors, update_before_add=False)
+    async_add_entities(sensors)
     LOGGER.info("Entities added for %s", [item.symbol for item in symbol_definitions])
 
 
@@ -103,9 +113,11 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
         coordinator: YahooSymbolUpdateCoordinator,
         symbol_definition: SymbolDefinition,
         domain_config: dict,
+        device_info: DeviceInfo | None = None,
     ) -> None:
         """Initialize the YahooFinance entity."""
         super().__init__(coordinator)
+        self._attr_device_info = device_info
 
         # Entity.hass is only populated after async_add_entities, use local reference
         self._hass = hass
@@ -113,14 +125,19 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
         symbol = symbol_definition.symbol
         self._symbol = symbol
         self._show_trending_icon = domain_config[CONF_SHOW_TRENDING_ICON]
-        self._show_currency_symbol_as_unit = domain_config[CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT]
+        self._show_currency_symbol_as_unit = domain_config[
+            CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT
+        ]
         self._decimal_places = domain_config[CONF_DECIMAL_PLACES]
         self._previous_close = None
         self._target_currency = symbol_definition.target_currency
         self._no_unit = symbol_definition.no_unit
         self._show_off_market_values = domain_config[CONF_SHOW_OFF_MARKET_VALUES]
 
+        # The symbol is kept as unique id so entities created by the YAML version
+        # are adopted with their history; the config flow keeps symbols unique.
         self._unique_id = symbol
+        # Preserve the historical sensor.yahoofinance_<symbol> entity ids
         self.entity_id = async_generate_entity_id(ENTITY_ID_FORMAT, symbol, hass=hass)
 
         # _attr_extra_state_attributes is returned by extra_state_attributes
@@ -247,22 +264,20 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
         return round(value, self._decimal_places)
 
     def _find_symbol_data(self, symbol: str):
-        """Find data for the specified symbol in all coordinators."""
-        coordinators: dict[timedelta, YahooSymbolUpdateCoordinator] = self._hass.data[
-            DOMAIN
-        ]
+        """Find data for the specified symbol, own coordinator first."""
+        coordinators: list[YahooSymbolUpdateCoordinator] = [self.coordinator]
+        for entry in self._hass.config_entries.async_entries(DOMAIN):
+            if entry.state is ConfigEntryState.LOADED:
+                coordinator = entry.runtime_data.coordinator
+                if coordinator is not self.coordinator:
+                    coordinators.append(coordinator)
 
-        # Search across all config entries
-        for entry_data in coordinators.values():
-            if not isinstance(entry_data, dict):
-                continue
-            entry_coordinators = entry_data.get(HASS_DATA_COORDINATORS, {})
-            for coordinator in entry_coordinators.values():
-                data = coordinator.data
-                if data is not None:
-                    symbol_data = data.get(symbol)
-                    if symbol_data is not None:
-                        return symbol_data
+        for coordinator in coordinators:
+            data = coordinator.data
+            if data is not None:
+                symbol_data = data.get(symbol)
+                if symbol_data is not None:
+                    return symbol_data
 
         return None
 
@@ -306,13 +321,15 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
 
         symbol_data = self._find_symbol_data(conversion_symbol)
 
-        if symbol_data is not None:
-            exchange_rate = self._get_market_price(symbol_data)
-            if exchange_rate is None:
-                self._waiting_on_conversion = True
-                return None
-            value *= exchange_rate
+        rate = self._get_market_price(symbol_data) if symbol_data is not None else None
+        if rate is not None:
+            value = value * rate
             LOGGER.debug("%s %s is %s", self._symbol, conversion_symbol, value)
+            return value
+        if symbol_data is not None:
+            # Rate symbol is tracked but has no price yet, wait for next update
+            self._waiting_on_conversion = True
+            return None
         else:
             LOGGER.info(
                 "%s No data found for %s, symbol added to coordinator",
@@ -321,9 +338,7 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
             )
             self._waiting_on_conversion = True
             self.coordinator.add_symbol(conversion_symbol)
-            return None
-
-        return value
+        return None
 
     def _update_original_currency_once(self, symbol_data) -> None:
         """Calculate the original currency once."""
@@ -384,16 +399,19 @@ class YahooFinanceSensor(CoordinatorEntity, SensorEntity):
             if value[1]:
                 attr_value = self.safe_convert(attr_value, conversion)
 
-            if key in PERCENTAGE_DATA_KEYS_NEEDING_MULTIPLICATION:
-                if attr_value is not None:
-                    attr_value = attr_value * 100
+            if (
+                key in PERCENTAGE_DATA_KEYS_NEEDING_MULTIPLICATION
+                and attr_value is not None
+            ):
+                attr_value = attr_value * 100
 
             self._attr_extra_state_attributes[key] = self._round(attr_value)
 
         # Add string attributes
-        self._attr_extra_state_attributes[ATTR_QUOTE_TYPE] = symbol_data[DATA_QUOTE_TYPE]
-        self._attr_extra_state_attributes[ATTR_QUOTE_SOURCE_NAME] = symbol_data[DATA_QUOTE_SOURCE_NAME]
-        self._attr_extra_state_attributes[ATTR_MARKET_STATE] = symbol_data[DATA_MARKET_STATE]
+        attributes = self._attr_extra_state_attributes
+        attributes[ATTR_QUOTE_TYPE] = symbol_data[DATA_QUOTE_TYPE]
+        attributes[ATTR_QUOTE_SOURCE_NAME] = symbol_data[DATA_QUOTE_SOURCE_NAME]
+        attributes[ATTR_MARKET_STATE] = symbol_data[DATA_MARKET_STATE]
 
         # Convert date-type values
         for key in DATE_DATA_KEYS:

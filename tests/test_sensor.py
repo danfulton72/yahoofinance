@@ -1,7 +1,7 @@
 """Tests for Yahoo Finance component."""
 
 import copy
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -23,7 +23,6 @@ from custom_components.yahoofinance.const import (
     CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT,
     CONF_SHOW_OFF_MARKET_VALUES,
     CONF_SHOW_TRENDING_ICON,
-    CONF_SYMBOLS,
     DATA_CURRENCY_SYMBOL,
     DATA_DIVIDEND_DATE,
     DATA_LONG_NAME,
@@ -44,20 +43,13 @@ from custom_components.yahoofinance.const import (
     DEFAULT_CURRENCY,
     DEFAULT_CURRENCY_SYMBOL,
     DEFAULT_NUMERIC_DATA_GROUP,
-    DOMAIN,
-    HASS_DATA_CONFIG,
-    HASS_DATA_COORDINATORS,
     NUMERIC_DATA_GROUPS,
 )
-from custom_components.yahoofinance.sensor import (
-    YahooFinanceSensor,
-    async_setup_platform,
-)
+from custom_components.yahoofinance.sensor import YahooFinanceSensor
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from . import TEST_SYMBOL
 
 SESSION = async_get_clientsession
 
@@ -128,31 +120,7 @@ def build_mock_coordinator_for_conversion(
 
 
 def install_coordinator(hass: HomeAssistant, coordinator) -> None:
-    """Install the coordinator into HASS_DATA_COORDINATORS store."""
-    hass.data[DOMAIN] = {HASS_DATA_COORDINATORS: {DEFAULT_SCAN_INTERVAL: coordinator}}
-
-
-async def test_setup_platform(hass: HomeAssistant) -> None:
-    """Test platform setup."""
-
-    async_add_entities = MagicMock()
-    mock_coordinator = build_mock_coordinator(hass, True, TEST_SYMBOL, 12)
-    mock_coordinators = {DEFAULT_SCAN_INTERVAL: mock_coordinator}
-
-    config = copy.deepcopy(DEFAULT_OPTIONAL_CONFIG)
-    config[CONF_SYMBOLS] = [
-        SymbolDefinition(TEST_SYMBOL, scan_interval=DEFAULT_SCAN_INTERVAL)
-    ]
-
-    hass.data = {
-        DOMAIN: {
-            HASS_DATA_COORDINATORS: mock_coordinators,
-            HASS_DATA_CONFIG: config,
-        }
-    }
-
-    await async_setup_platform(hass, None, async_add_entities, None)
-    assert async_add_entities.called
+    """Sensors look up conversion data in their own coordinator first."""
 
 
 @pytest.mark.parametrize(
@@ -504,9 +472,9 @@ async def test_optional_data_from_json(
 @pytest.mark.parametrize(
     ("symbol", "expected_market_price"),
     [
-        ('ADYEN', 1396.4),
-        ('Alibaba Group Holding Limited', 121.17),
-        ('Apple Inc.', 231.18),
+        ("ADYEN", 1396.4),
+        ("Alibaba Group Holding Limited", 121.17),
+        ("Apple Inc.", 231.18),
     ],
 )
 async def test_show_off_market(
@@ -538,7 +506,7 @@ async def test_show_off_market(
     for sensor in sensors:
         sensor.update_properties()
         if symbol in sensor.name:
-          assert sensor.state == expected_market_price
+            assert sensor.state == expected_market_price
 
 
 @pytest.mark.parametrize(

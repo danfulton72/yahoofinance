@@ -3,59 +3,73 @@
   "config": {
     "step": {
       "user": {
-        "title": "Yahoo Finance Setup",
-        "description": "Enter the symbols to track, separated by commas. Examples: AAPL, MSFT, ^GSPC, GBPUSD=X, EMIM.L\n\nNote: This integration works best in US mainland. GDPR regions may experience failures.",
+        "title": "Yahoo Finance setup",
+        "description": "Enter the symbols to track.\n\nNote: requests can fail in some GDPR regions.",
         "data": {
-          "symbols": "Symbols (e.g. AAPL, MSFT, ^GSPC)",
-          "scan_interval": "Update interval (hours, 1\u201324)"
+          "symbols": "Symbols",
+          "scan_interval": "Update interval"
         },
         "data_description": {
-          "scan_interval": "How often to fetch prices from Yahoo Finance. Minimum 1 hour, maximum 24 hours.",
-          "symbols": "Separate multiple symbols with commas or spaces. Use Yahoo Finance ticker format, e.g. AAPL, ^GSPC, GBPUSD=X, EMIM.L"
+          "symbols": "Separate symbols with commas, spaces or new lines, using Yahoo Finance ticker format. Optionally add `:CUR` to convert to another currency and/or `:nounit` to drop the unit, e.g. `AAPL`, `LGEN.L:USD`, `GBPUSD=X:nounit`, `EMIM.L:EUR:nounit`.",
+          "scan_interval": "How often to fetch prices from Yahoo Finance (minimum 30 seconds). Add another Yahoo Finance entry if some symbols need a different interval."
         }
       }
     },
     "error": {
-      "no_symbols": "Please enter at least one valid symbol."
+      "no_symbols": "Enter at least one symbol.",
+      "invalid_symbol": "`{symbol}` is not a valid entry. Use `SYMBOL`, optionally followed by `:CUR` and/or `:nounit`.",
+      "symbol_in_use": "Already tracked by another Yahoo Finance entry: {symbol}",
+      "interval_too_short": "The update interval must be at least 30 seconds."
     },
     "abort": {
-      "already_configured": "This integration is already configured."
+      "already_configured": "These symbols are already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Yahoo Finance Options",
-        "description": "Update tracked symbols and configure display options.",
+        "title": "Yahoo Finance options",
+        "description": "Update tracked symbols and display options.",
         "data": {
-          "symbols": "Symbols (comma-separated, e.g. AAPL, MSFT, ^GSPC)",
-          "scan_interval": "Update interval (hours, 1\u201324)",
-          "decimal_places": "Decimal places (-1 = no rounding, 0 = integer)",
-          "show_trending_icon": "Show trending icon (up/down/neutral) instead of currency icon",
-          "show_currency_symbol_as_unit": "Show currency symbol (e.g. $) instead of code (e.g. USD) as unit",
-          "show_off_market_values": "Show pre/post market price as main sensor value when market is closed",
-          "include_pre_values": "Include pre-market price, change and time attributes",
-          "include_post_values": "Include post-market price, change and time attributes",
+          "symbols": "Symbols",
+          "scan_interval": "Update interval",
+          "manual_update": "Disable automatic updates",
+          "decimal_places": "Decimal places",
+          "target_currency": "Default target currency",
+          "show_trending_icon": "Show trending icon",
+          "show_currency_symbol_as_unit": "Show currency symbol as unit",
+          "show_off_market_values": "Show off-market prices",
+          "include_pre_values": "Include pre-market attributes",
+          "include_post_values": "Include post-market attributes",
           "include_fifty_day_values": "Include 50-day average attributes",
           "include_two_hundred_day_values": "Include 200-day average attributes",
           "include_fifty_two_week_values": "Include 52-week high/low attributes",
-          "include_dividend_values": "Include dividend attributes (date, rate, yield)"
+          "include_dividend_values": "Include dividend attributes"
         },
         "data_description": {
-          "scan_interval": "How often to fetch prices from Yahoo Finance. Minimum 1 hour, maximum 24 hours.",
-          "symbols": "Separate multiple symbols with commas or spaces. Use Yahoo Finance ticker format, e.g. AAPL, ^GSPC, GBPUSD=X, EMIM.L",
-          "decimal_places": "Number of decimal places to round prices to. Use -1 to disable rounding, 0 for whole numbers."
+          "symbols": "Separate symbols with commas, spaces or new lines, using Yahoo Finance ticker format. Optionally add `:CUR` to convert to another currency and/or `:nounit` to drop the unit, e.g. `AAPL`, `LGEN.L:USD`, `GBPUSD=X:nounit`, `EMIM.L:EUR:nounit`.",
+          "scan_interval": "How often to fetch prices from Yahoo Finance (minimum 30 seconds). Add another Yahoo Finance entry if some symbols need a different interval.",
+          "manual_update": "Only refresh when the `yahoofinance.refresh_symbols` action is called.",
+          "decimal_places": "Use -1 to disable rounding, 0 for whole numbers.",
+          "target_currency": "Three-letter currency code applied to symbols without their own `:CUR`. Leave empty to keep the reported currency.",
+          "show_trending_icon": "Use trending up/down/neutral icons instead of the currency icon.",
+          "show_currency_symbol_as_unit": "Use the symbol (e.g. $) instead of the code (e.g. USD) as the unit.",
+          "show_off_market_values": "Use the pre/post market price as the sensor value when it is more recent than the regular market price."
         }
       }
     },
     "error": {
-      "no_symbols": "Please enter at least one valid symbol."
+      "no_symbols": "Enter at least one symbol.",
+      "invalid_symbol": "`{symbol}` is not a valid entry. Use `SYMBOL`, optionally followed by `:CUR` and/or `:nounit`.",
+      "symbol_in_use": "Already tracked by another Yahoo Finance entry: {symbol}",
+      "interval_too_short": "The update interval must be at least 30 seconds.",
+      "invalid_currency": "Enter a three-letter currency code, e.g. EUR."
     }
   },
   "services": {
     "refresh_symbols": {
-      "name": "Refresh Symbols",
-      "description": "Manually trigger a refresh of all Yahoo Finance symbol data."
+      "name": "Refresh symbols",
+      "description": "Fetches the latest data for all Yahoo Finance symbols."
     }
   }
 }

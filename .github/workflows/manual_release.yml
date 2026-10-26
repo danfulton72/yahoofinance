@@ -1,54 +1,38 @@
-name: Maunal release
+name: Manual release
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Create next minor tag
-        id: next_minor_tag
+      - name: Read version from manifest
+        id: version
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git fetch origin --tags --quiet
-
-          last_tag=`git describe --tags $(git rev-list --tags --max-count=1)`
-          echo "Last tag: ${last_tag}";
-
-          if [ -z "${last_tag}" ];then
-              last_tag="${INPUT_PREV_TAG}0.1.0";
-              echo "Last defaulted to ${last_tag}";
+          version=$(jq -r .version custom_components/yahoofinance/manifest.json)
+          tag="v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists; bump the version in manifest.json first." >&2
+            exit 1
           fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-          next_tag="${last_tag%.*}.$((${last_tag##*.}+1))"
-          echo "Next tag: ${next_tag}";
-
-          git tag ${next_tag} -f
-          git push --tags -f
-
-          echo "next_tag=$next_tag" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          tag_name: ${{ steps.next_minor_tag.outputs.next_tag }}
-          release_name: ${{ steps.next_minor_tag.outputs.next_tag }}
-          draft: false
-          prerelease: false
-
-      - name: "ZIP the integration directory"
-        shell: "bash"
+      - name: Zip the integration directory
         run: |
-          cd "${{ github.workspace }}/custom_components/yahoofinance"
-          zip yahoofinance.zip -r ./
+          cd custom_components/yahoofinance
+          zip -r "${{ github.workspace }}/yahoofinance.zip" . -x "__pycache__/*"
 
-      - name: "Upload the ZIP file to the release"
-        uses: "softprops/action-gh-release@v2.0.8"
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.next_minor_tag.outputs.next_tag }}
-          files: ${{ github.workspace }}/custom_components/yahoofinance/yahoofinance.zip
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: yahoofinance.zip

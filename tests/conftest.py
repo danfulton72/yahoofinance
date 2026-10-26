@@ -2,7 +2,7 @@
 
 import json
 import os
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -63,3 +63,11 @@ def create_mock_crumb_coordinator(hass: HomeAssistant) -> CrumbCoordinator:
     instance = CrumbCoordinator(hass, SESSION)
     instance.try_get_crumb_cookies = AsyncMock(return_value=crumb)
     return instance
+
+
+def mock_get_returning(response) -> MagicMock:
+    """Return a mock for session.get usable as an async context manager."""
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    context.__aexit__ = AsyncMock(return_value=False)
+    return MagicMock(return_value=context)

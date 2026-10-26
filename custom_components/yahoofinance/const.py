@@ -25,10 +25,6 @@ ATTR_DIVIDEND_DATE: Final = "dividendDate"
 ATTR_DIVIDEND_RATE: Final = "dividendRate"
 ATTR_DIVIDEND_YIELD: Final = "dividendYield"
 
-# Hass data
-HASS_DATA_CONFIG: Final = "config"
-HASS_DATA_COORDINATORS: Final = "coordinators"
-
 # JSON data pieces
 DATA_CURRENCY_SYMBOL: Final = "currency"
 DATA_FINANCIAL_CURRENCY: Final = "financialCurrency"
@@ -61,11 +57,13 @@ CONF_INCLUDE_TWO_HUNDRED_DAY_VALUES: Final = "include_two_hundred_day_values"
 CONF_INCLUDE_FIFTY_TWO_WEEK_VALUES: Final = "include_fifty_two_week_values"
 CONF_INCLUDE_DIVIDEND_VALUES: Final = "include_dividend_values"
 CONF_SHOW_TRENDING_ICON: Final = "show_trending_icon"
-CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT = "show_currency_symbol_as_unit"
-CONF_SHOW_OFF_MARKET_VALUES = "show_off_market_values"
+CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT: Final = "show_currency_symbol_as_unit"
+CONF_SHOW_OFF_MARKET_VALUES: Final = "show_off_market_values"
 CONF_TARGET_CURRENCY: Final = "target_currency"
 CONF_NO_UNIT: Final = "no_unit"
 CONF_SYMBOLS: Final = "symbols"
+CONF_SYMBOL: Final = "symbol"
+CONF_MANUAL_UPDATE: Final = "manual_update"
 
 DEFAULT_CONF_DECIMAL_PLACES: Final = 2
 DEFAULT_CONF_INCLUDE_DIVIDEND_VALUES: Final = False
@@ -76,7 +74,8 @@ DEFAULT_CONF_INCLUDE_PRE_VALUES: Final = False
 DEFAULT_CONF_INCLUDE_TWO_HUNDRED_DAY_VALUES: Final = False
 DEFAULT_CONF_SHOW_TRENDING_ICON: Final = False
 DEFAULT_CONF_SHOW_CURRENCY_SYMBOL_AS_UNIT: Final = False
-DEFAULT_CONF_SHOW_OFF_MARKET_VALUES = False
+DEFAULT_CONF_SHOW_OFF_MARKET_VALUES: Final = False
+DEFAULT_CONF_MANUAL_UPDATE: Final = False
 DEFAULT_CONF_NO_UNIT: Final = False
 
 DEFAULT_NUMERIC_DATA_GROUP: Final = "default"

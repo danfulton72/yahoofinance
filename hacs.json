@@ -1,4 +1,5 @@
 {
-    "name": "Yahoo Finance",
-    "render_readme": true
+  "name": "Yahoo Finance",
+  "homeassistant": "2025.12.0",
+  "render_readme": true
 }

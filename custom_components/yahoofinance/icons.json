@@ -1,0 +1,7 @@
+{
+  "services": {
+    "refresh_symbols": {
+      "service": "mdi:refresh"
+    }
+  }
+}
